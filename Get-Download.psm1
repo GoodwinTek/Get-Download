@@ -1,14 +1,41 @@
+#Requires -Version 7.0
+
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-$ModuleRoot = $PSScriptRoot
-$YtDlpExe = Join-Path -Path $ModuleRoot -ChildPath "PRIVATE\yt-dlp.exe"
+$CachePath = Join-Path -Path $env:APPDATA -ChildPath "Get-Download\PRIVATE"
+$YtDlpExe = Join-Path -Path $CachePath -ChildPath "yt-dlp.exe"
+$YtDlpDownloadUrl = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"
+
+function Initialize-YtDlp {
+    if (Test-Path -Path $YtDlpExe -PathType Leaf) {
+        return $true
+    }
+
+    if (-not (Test-Path -Path $CachePath -PathType Container)) {
+        New-Item -ItemType Directory -Path $CachePath -Force | Out-Null
+    }
+
+    try {
+        Write-Host "Downloading yt-dlp.exe..."
+        Invoke-WebRequest -Uri $YtDlpDownloadUrl -OutFile $YtDlpExe -ErrorAction Stop
+        Write-Host "yt-dlp.exe downloaded successfully."
+        return $true
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show("Failed to download yt-dlp.exe: $($_.Exception.Message)", "Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+        return $false
+    }
+}
 
 function Get-Download {
     [CmdletBinding()]
     param(
         [string]$DefaultOutputPath = ""
     )
+
+    if (-not (Initialize-YtDlp)) {
+        return
+    }
 
     if (-not (Test-Path -Path $YtDlpExe -PathType Leaf)) {
         throw "yt-dlp.exe not found at: $YtDlpExe"
