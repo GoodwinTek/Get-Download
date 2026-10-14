@@ -7,7 +7,7 @@ $CachePath = Join-Path -Path $env:APPDATA -ChildPath "Get-Download\PRIVATE"
 $YtDlpExe = Join-Path -Path $CachePath -ChildPath "yt-dlp.exe"
 $YtDlpDownloadUrl = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"
 $ModulePath = $PSScriptRoot
-$GitHubRawUrl = "https://raw.githubusercontent.com/Goodwintek/Get-Download/main/Get-Download"
+$GitHubRawUrl = "https://raw.githubusercontent.com/Goodwintek/Get-Download/main"
 
 function Initialize-YtDlp {
     if (Test-Path -Path $YtDlpExe -PathType Leaf) {

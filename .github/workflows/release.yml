@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Get-Download.psd1'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Get module version
+        id: version
+        run: |
+          $manifest = Import-PowerShellDataFile ./Get-Download.psd1
+          $version = $manifest.ModuleVersion
+          echo "version=$version" >> $GITHUB_OUTPUT
+        shell: pwsh
+      
+      - name: Check if release exists
+        id: check
+        run: |
+          try {
+            gh release view v${{ steps.version.outputs.version }} 2>$null
+            echo "exists=true" >> $GITHUB_OUTPUT
+          } catch {
+            echo "exists=false" >> $GITHUB_OUTPUT
+          }
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Create release
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          gh release create v${{ steps.version.outputs.version }} `
+            --title "Get-Download v${{ steps.version.outputs.version }}" `
+            --generate-notes
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
