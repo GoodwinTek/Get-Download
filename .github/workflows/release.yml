@@ -32,3 +32,15 @@ jobs:
 
           gh release create $tag --title "Get-Download $version" --generate-notes --target $env:GITHUB_SHA
           if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }
+          
+      - name: Publish to PowerShell Gallery
+        shell: pwsh
+        env:
+          PSGALLERY_API_KEY: ${{ secrets.PSGALLERY_API_KEY }}
+        run: |
+          $version = (Import-PowerShellDataFile ./Get-Download.psd1).ModuleVersion
+          Write-Host "Publishing Get-Download v$version to PowerShell Gallery"
+          
+          Publish-Module -Path . `
+            -NuGetApiKey $env:PSGALLERY_API_KEY `
+            -ErrorAction Stop
