@@ -2,46 +2,33 @@ name: Release
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
     paths:
       - 'Get-Download.psd1'
+
+permissions:
+  contents: write
 
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Get module version
-        id: version
-        run: |
-          $manifest = Import-PowerShellDataFile -Path ${{ github.workspace }}/Get-Download.psd1
-          $version = $manifest.ModuleVersion
-          Write-Host "Extracted version: $version"
-          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-        shell: pwsh
-      
-      - name: Create release
-        run: |
-          $version = "${{ steps.version.outputs.version }}"
-          Write-Host "Creating release for version: $version"
-          
-          if ([string]::IsNullOrWhiteSpace($version)) {
-            Write-Host "ERROR: Version is empty"
-            exit 1
-          }
-          
-          $tagName = "v$version"
-          try {
-            gh release view $tagName 2>$null
-            Write-Host "Release $tagName already exists"
-          } catch {
-            Write-Host "Creating new release: $tagName"
-            gh release create $tagName `
-              --title "Get-Download $version" `
-              --generate-notes
-          }
+
+      - name: Create release if version is new
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = (Import-PowerShellDataFile ./Get-Download.psd1).ModuleVersion
+          if (-not $version) { throw "ModuleVersion not found" }
+          $tag = "v$version"
+
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Release $tag already exists, nothing to do"
+            exit 0
+          }
+
+          gh release create $tag --title "Get-Download $version" --generate-notes --target $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }
