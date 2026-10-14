@@ -1,4 +1,4 @@
-#Requires -Version 7.0
+#Requires -Version 5.0
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
