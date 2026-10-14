@@ -4,7 +4,7 @@ Add-Type -AssemblyName System.Drawing
 $ModuleRoot = $PSScriptRoot
 $YtDlpExe = Join-Path -Path $ModuleRoot -ChildPath "PRIVATE\yt-dlp.exe"
 
-function Get-Content {
+function Get-Download {
     [CmdletBinding()]
     param(
         [string]$DefaultOutputPath = ""
@@ -153,4 +153,4 @@ function Get-Content {
     Write-Host ""
 }
 
-Export-ModuleMember -Function Get-Content
+Export-ModuleMember -Function Get-Download

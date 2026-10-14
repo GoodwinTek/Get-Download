@@ -6,6 +6,6 @@
     Description       = 'yt-dlp GUI downloader with embedded executable'
     PowerShellVersion = '5.0'
     FunctionsToExport = @(
-        'Get-Content'
+        'Get-Download'
     )
 }
