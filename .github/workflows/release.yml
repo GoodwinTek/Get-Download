@@ -16,30 +16,32 @@ jobs:
       - name: Get module version
         id: version
         run: |
-          $manifest = Import-PowerShellDataFile ./Get-Download.psd1
+          $manifest = Import-PowerShellDataFile -Path ${{ github.workspace }}/Get-Download.psd1
           $version = $manifest.ModuleVersion
-          echo "version=$version" >> $GITHUB_OUTPUT
+          Write-Host "Extracted version: $version"
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
         shell: pwsh
-      
-      - name: Check if release exists
-        id: check
-        run: |
-          try {
-            gh release view v${{ steps.version.outputs.version }} 2>$null
-            echo "exists=true" >> $GITHUB_OUTPUT
-          } catch {
-            echo "exists=false" >> $GITHUB_OUTPUT
-          }
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Create release
-        if: steps.check.outputs.exists == 'false'
         run: |
-          gh release create v${{ steps.version.outputs.version }} `
-            --title "Get-Download v${{ steps.version.outputs.version }}" `
-            --generate-notes
+          $version = "${{ steps.version.outputs.version }}"
+          Write-Host "Creating release for version: $version"
+          
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            Write-Host "ERROR: Version is empty"
+            exit 1
+          }
+          
+          $tagName = "v$version"
+          try {
+            gh release view $tagName 2>$null
+            Write-Host "Release $tagName already exists"
+          } catch {
+            Write-Host "Creating new release: $tagName"
+            gh release create $tagName `
+              --title "Get-Download $version" `
+              --generate-notes
+          }
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
