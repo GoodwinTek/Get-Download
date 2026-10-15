@@ -79,13 +79,15 @@ function Get-YtDlpArgs {
 
     $argsList = [System.Collections.Generic.List[string]]::new()
 
+    # Ensure output path is wrapped cleanly with filename template
     $argsList.Add("--output")
     $argsList.Add("$OutputDir\%(title)s.%(ext)s")
 
     if ($FfmpegHls) {
         $argsList.Add("--merge-output-format")
         $argsList.Add("mp4")
-    } else {
+    } elseif (-not $Url.EndsWith(".m3u8")) {
+        # Avoid metadata embedding errors on direct m3u8 playlist links
         $argsList.Add("--embed-metadata")
     }
 
