@@ -8,4 +8,10 @@
     FunctionsToExport = @(
         'Get-Download'
     )
+    PrivateData = @{
+    PSData = @{
+        ProjectUri = 'https://github.com/Goodwintek/Get-Download'
+        Tags       = @('yt-dlp', 'youtube', 'download', 'GUI')
+        }
+    }
 }
