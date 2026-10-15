@@ -34,7 +34,7 @@ function Update-GetDownload {
     param()
 
     $result = [System.Windows.Forms.MessageBox]::Show("This will update Get-Download module and yt-dlp. Continue?", "Update", [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Question)
-    
+
     if ($result -ne [System.Windows.Forms.DialogResult]::Yes) {
         return
     }
@@ -77,39 +77,18 @@ function Get-YtDlpArgs {
         [bool]$BotFix
     )
 
-    $argsList = [System.Collections.Generic.List[string]]::new()
-
-    $argsList.Add("--output")
-    $argsList.Add("$OutputDir\%(title)s.%(ext)s")
+    $template = "$OutputDir\%(title)s.%(ext)s"
+    $argString = "--output `"$template`" --embed-metadata"
 
     if ($FfmpegHls) {
-        $argsList.Add("--merge-output-format")
-        $argsList.Add("mp4")
-    } elseif (-not $Url.EndsWith(".m3u8")) {
-        $argsList.Add("--embed-metadata")
+        $argString += " --merge-output-format mp4 --downloader m3u8:ffmpeg --downloader-args `"ffmpeg:-protocol_whitelist file,http,https,tcp,tls,crypto`""
     }
+    if ($AudioOnly) { $argString += " -x" }
+    if ($SslFix) { $argString += " --legacy-server-connect --no-check-certificate" }
+    if ($BotFix) { $argString += " --extractor-args `"generic:impersonate`"" }
+    $argString += " `"$Url`""
 
-    if ($AudioOnly) { 
-        $argsList.Add("-x") 
-    }
-    if ($SslFix) { 
-        $argsList.Add("--legacy-server-connect")
-        $argsList.Add("--no-check-certificate")
-    }
-    if ($FfmpegHls) { 
-        $argsList.Add("--downloader")
-        $argsList.Add("m3u8:ffmpeg")
-        $argsList.Add("--downloader-args")
-        $argsList.Add("ffmpeg:-protocol_whitelist file,http,https,tcp,tls,crypto")
-    }
-    if ($BotFix) { 
-        $argsList.Add("--extractor-args")
-        $argsList.Add("generic:impersonate")
-    }
-    
-    $argsList.Add($Url)
-
-    return $argsList
+    return $argString
 }
 
 function Get-Download {
@@ -240,44 +219,47 @@ function Get-Download {
                 }
             }
 
-            # Automated fallback sequence: runs checks one by one until successful
-            $attempts = [System.Collections.Generic.List[hashtable]]::new()
-            $attempts.Add(@{ Ssl = $false; Ffmpeg = $false; Bot = $false }) # 1. Standard
-            $attempts.Add(@{ Ssl = $true;  Ffmpeg = $false; Bot = $false }) # 2. SSL Fix
-            $attempts.Add(@{ Ssl = $false; Ffmpeg = $false; Bot = $true  }) # 3. Bot Fix
-            $attempts.Add(@{ Ssl = $false; Ffmpeg = $true;  Bot = $false }) # 4. HLS Fix
-            $attempts.Add(@{ Ssl = $true;  Ffmpeg = $false; Bot = $true  }) # 5. SSL + Bot Fix
-            $attempts.Add(@{ Ssl = $true;  Ffmpeg = $true;  Bot = $true  }) # 6. All Fixes Enabled
+            # Each attempt is independent: base arguments plus one option set, tried in order
+            $attempts = @(
+                @{ Label = "Standard";      Ssl = $false; Ffmpeg = $false; BotFix = $false }
+                @{ Label = "SSL fix";       Ssl = $true;  Ffmpeg = $false; BotFix = $false }
+                @{ Label = "HLS via ffmpeg"; Ssl = $false; Ffmpeg = $true; BotFix = $false }
+                @{ Label = "Bot fix";        Ssl = $false; Ffmpeg = $false; BotFix = $true }
+                #@{ Label = "SSL + HLS";     Ssl = $true;  Ffmpeg = $true; BotFix = $false }
+            )
 
-            foreach ($attempt in $attempts) {
-                $argArray = Get-YtDlpArgs -OutputDir $outputDir -Url $url -AudioOnly $audioOnly -SslFix $attempt.Ssl -FfmpegHls $attempt.Ffmpeg -BotFix $attempt.Bot
-                Write-Host "Attempt (SSL fix: $($attempt.Ssl), ffmpeg HLS: $($attempt.Ffmpeg), Bot fix: $($attempt.Bot)): $YtDlpExe $($argArray -join ' ')"
+                        foreach ($attempt in $attempts) {
+                $argString = Get-YtDlpArgs -OutputDir $outputDir -Url $url -AudioOnly $audioOnly -SslFix $attempt.Ssl -FfmpegHls $attempt.Ffmpeg -BotFix $attempt.BotFix
 
-                $proc = Start-Process -FilePath $YtDlpExe -ArgumentList $argArray -NoNewWindow -Wait -PassThru
-                if ($proc.ExitCode -eq 0) {
+                Write-Host "Attempt [$($attempt.Label)]: $YtDlpExe $argString"
+
+                $proc = Start-Process -FilePath $YtDlpExe -ArgumentList $argString -NoNewWindow -Wait -PassThru
+                $exitCode = $proc.ExitCode
+
+                if ($exitCode -eq 0) {
                     Write-Host "Download completed successfully."
                     [System.Windows.Forms.MessageBox]::Show("Download completed successfully!", "Success", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
                     return
                 }
-                Write-Host "yt-dlp exited with code $($proc.ExitCode). Trying next fallback..."
-            }
-
-            [System.Windows.Forms.MessageBox]::Show("All fallback attempts failed. Check the console for details.", "yt-dlp error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning)
-        })
-        $form.Controls.Add($downloadButton)
-
-        $form.ShowDialog() | Out-Null
-        $form.Dispose()
-
-        if ($global:RestartApp) {
-            Remove-Module Get-Download -Force
-            Import-Module (Join-Path -Path $ModulePath -ChildPath "Get-Download.psd1") -Force
-            Get-Download
-            return
+                Write-Host "[$($attempt.Label)] exited with code $exitCode. Trying next option..."
+                    }
+                
+                    [System.Windows.Forms.MessageBox]::Show("All attempts failed. Check the console for details.", "yt-dlp error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning)
+                })
+                $form.Controls.Add($downloadButton)
+            
+                $form.ShowDialog() | Out-Null
+                $form.Dispose()
+            
+                if ($global:RestartApp) {
+                    Remove-Module Get-Download -Force
+                    Import-Module (Join-Path -Path $ModulePath -ChildPath "Get-Download.psd1") -Force
+                    Get-Download
+                    return
+                }
+            } while ($global:RestartApp)
+        
+            Write-Host ""
         }
-    } while ($global:RestartApp)
-
-    Write-Host ""
-}
 
 Export-ModuleMember -Function Get-Download, Update-GetDownload
