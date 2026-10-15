@@ -77,7 +77,6 @@ function Get-YtDlpArgs {
         [bool]$BotFix
     )
 
-    # Return arguments as an array of strings for robust parsing with Start-Process
     $argsList = [System.Collections.Generic.List[string]]::new()
 
     $argsList.Add("--output")
@@ -139,7 +138,7 @@ function Get-Download {
         $form = New-Object System.Windows.Forms.Form
         $form.Text = "Get-Download"
         $form.Width = 400
-        $form.Height = 280
+        $form.Height = 210
         $form.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen
 
         $menuStrip = New-Object System.Windows.Forms.MenuStrip
@@ -190,32 +189,14 @@ function Get-Download {
         $audioOnlyCheckBox.Text = "Extract Audio Only (-x)"
         $form.Controls.Add($audioOnlyCheckBox)
 
-        $sslFixCheckBox = New-Object System.Windows.Forms.CheckBox
-        $sslFixCheckBox.Location = New-Object System.Drawing.Point(10, 95)
-        $sslFixCheckBox.AutoSize = $true
-        $sslFixCheckBox.Text = "SSL Error Fix (legacy TLS + skip cert check)"
-        $form.Controls.Add($sslFixCheckBox)
-
-        $ffmpegHlsCheckBox = New-Object System.Windows.Forms.CheckBox
-        $ffmpegHlsCheckBox.Location = New-Object System.Drawing.Point(10, 120)
-        $ffmpegHlsCheckBox.AutoSize = $true
-        $ffmpegHlsCheckBox.Text = "HLS via ffmpeg (fixes CDN m3u8 SSL/stream errors)"
-        $form.Controls.Add($ffmpegHlsCheckBox)
-
-        $botFixCheckBox = New-Object System.Windows.Forms.CheckBox
-        $botFixCheckBox.Location = New-Object System.Drawing.Point(10, 145)
-        $botFixCheckBox.AutoSize = $true
-        $botFixCheckBox.Text = "Bot Error Fix"
-        $form.Controls.Add($botFixCheckBox)
-
         $outputLabel = New-Object System.Windows.Forms.Label
-        $outputLabel.Location = New-Object System.Drawing.Point(10, 165)
+        $outputLabel.Location = New-Object System.Drawing.Point(10, 100)
         $outputLabel.AutoSize = $true
         $outputLabel.Text = "Output Folder:"
         $form.Controls.Add($outputLabel)
 
         $script:outputTextBox = New-Object System.Windows.Forms.TextBox
-        $script:outputTextBox.Location = New-Object System.Drawing.Point(100, 162)
+        $script:outputTextBox.Location = New-Object System.Drawing.Point(100, 97)
         $script:outputTextBox.Width = 200
         if ($DefaultOutputPath) {
             $script:outputTextBox.Text = $DefaultOutputPath
@@ -223,7 +204,7 @@ function Get-Download {
         $form.Controls.Add($script:outputTextBox)
 
         $browseButton = New-Object System.Windows.Forms.Button
-        $browseButton.Location = New-Object System.Drawing.Point(305, 160)
+        $browseButton.Location = New-Object System.Drawing.Point(305, 95)
         $browseButton.Text = "Browse"
         $browseButton.Add_Click({
             $folderBrowserDialog = New-Object System.Windows.Forms.FolderBrowserDialog
@@ -238,15 +219,12 @@ function Get-Download {
         $form.Controls.Add($browseButton)
 
         $downloadButton = New-Object System.Windows.Forms.Button
-        $downloadButton.Location = New-Object System.Drawing.Point(150, 210)
+        $downloadButton.Location = New-Object System.Drawing.Point(150, 140)
         $downloadButton.Text = "Download"
         $downloadButton.Add_Click({
             $url = $script:urlTextBox.Text
             $outputDir = $script:outputTextBox.Text
             $audioOnly = $audioOnlyCheckBox.Checked
-            $sslFix = $sslFixCheckBox.Checked
-            $ffmpegHls = $ffmpegHlsCheckBox.Checked
-            $botFix = $botFixCheckBox.Checked
 
             if ([string]::IsNullOrEmpty($url) -or [string]::IsNullOrEmpty($outputDir)) {
                 [System.Windows.Forms.MessageBox]::Show("Please enter a URL and select an output folder.", "Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
@@ -262,12 +240,14 @@ function Get-Download {
                 }
             }
 
+            # Automated fallback sequence: runs checks one by one until successful
             $attempts = [System.Collections.Generic.List[hashtable]]::new()
-            $attempts.Add(@{ Ssl = $sslFix; Ffmpeg = $ffmpegHls; Bot = $botFix })
-            foreach ($candidate in @(@{ Ssl = $true; Ffmpeg = $ffmpegHls; Bot = $botFix }, @{ Ssl = $true; Ffmpeg = $true; Bot = $botFix })) {
-                $duplicate = $attempts | Where-Object { $_.Ssl -eq $candidate.Ssl -and $_.Ffmpeg -eq $candidate.Ffmpeg -and $_.Bot -eq $candidate.Bot }
-                if (-not $duplicate) { $attempts.Add($candidate) }
-            }
+            $attempts.Add(@{ Ssl = $false; Ffmpeg = $false; Bot = $false }) # 1. Standard
+            $attempts.Add(@{ Ssl = $true;  Ffmpeg = $false; Bot = $false }) # 2. SSL Fix
+            $attempts.Add(@{ Ssl = $false; Ffmpeg = $false; Bot = $true  }) # 3. Bot Fix
+            $attempts.Add(@{ Ssl = $false; Ffmpeg = $true;  Bot = $false }) # 4. HLS Fix
+            $attempts.Add(@{ Ssl = $true;  Ffmpeg = $false; Bot = $true  }) # 5. SSL + Bot Fix
+            $attempts.Add(@{ Ssl = $true;  Ffmpeg = $true;  Bot = $true  }) # 6. All Fixes Enabled
 
             foreach ($attempt in $attempts) {
                 $argArray = Get-YtDlpArgs -OutputDir $outputDir -Url $url -AudioOnly $audioOnly -SslFix $attempt.Ssl -FfmpegHls $attempt.Ffmpeg -BotFix $attempt.Bot
@@ -275,14 +255,14 @@ function Get-Download {
 
                 $proc = Start-Process -FilePath $YtDlpExe -ArgumentList $argArray -NoNewWindow -Wait -PassThru
                 if ($proc.ExitCode -eq 0) {
-                    Write-Host "Download completed."
-                    [System.Windows.Forms.MessageBox]::Show("Download completed!", "Success", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
+                    Write-Host "Download completed successfully."
+                    [System.Windows.Forms.MessageBox]::Show("Download completed successfully!", "Success", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
                     return
                 }
-                Write-Host "yt-dlp exited with code $($proc.ExitCode)."
+                Write-Host "yt-dlp exited with code $($proc.ExitCode). Trying next fallback..."
             }
 
-            [System.Windows.Forms.MessageBox]::Show("All attempts failed. Check the console for details.", "yt-dlp error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning)
+            [System.Windows.Forms.MessageBox]::Show("All fallback attempts failed. Check the console for details.", "yt-dlp error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning)
         })
         $form.Controls.Add($downloadButton)
 
