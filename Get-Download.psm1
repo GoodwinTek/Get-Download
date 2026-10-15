@@ -270,6 +270,9 @@ function Get-Download {
         if ($global:RestartApp) {
             Remove-Module Get-Download -Force
             Import-Module $psd1Path -Force
+            Import-Module (Join-Path -Path $ModulePath -ChildPath "Get-Download.psd1") -Force
+            Get-Download
+            return
         }
     } while ($global:RestartApp)
 
