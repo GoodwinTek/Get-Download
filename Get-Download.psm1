@@ -74,21 +74,43 @@ function Get-YtDlpArgs {
         [bool]$AudioOnly,
         [bool]$SslFix,
         [bool]$FfmpegHls,
-        [bool]$botFix
+        [bool]$BotFix
     )
 
-    if ($FfmpegHls) {
-        $argString = "--output `"$OutputDir\%(title)s.%(ext)s`" --merge-output-format mp4"
-    } else {
-        $argString = "--output `"$OutputDir\%(title)s.%(ext)s`" --embed-metadata"
-    }
-    if ($AudioOnly) { $argString += " -x" }
-    if ($SslFix) { $argString += " --legacy-server-connect --no-check-certificate" }
-    if ($FfmpegHls) { $argString += " --downloader m3u8:ffmpeg --downloader-args `"ffmpeg:-protocol_whitelist file,http,https,tcp,tls,crypto`"" }
-    if ($botFix) { $argString += " --extractor-args `"generic:impersonate`"" }
-    $argString += " `"$Url`""
+    # Return arguments as an array of strings for robust parsing with Start-Process
+    $argsList = [System.Collections.Generic.List[string]]::new()
 
-    return $argString
+    $argsList.Add("--output")
+    $argsList.Add("$OutputDir\%(title)s.%(ext)s")
+
+    if ($FfmpegHls) {
+        $argsList.Add("--merge-output-format")
+        $argsList.Add("mp4")
+    } else {
+        $argsList.Add("--embed-metadata")
+    }
+
+    if ($AudioOnly) { 
+        $argsList.Add("-x") 
+    }
+    if ($SslFix) { 
+        $argsList.Add("--legacy-server-connect")
+        $argsList.Add("--no-check-certificate")
+    }
+    if ($FfmpegHls) { 
+        $argsList.Add("--downloader")
+        $argsList.Add("m3u8:ffmpeg")
+        $argsList.Add("--downloader-args")
+        $argsList.Add("ffmpeg:-protocol_whitelist file,http,https,tcp,tls,crypto")
+    }
+    if ($BotFix) { 
+        $argsList.Add("--extractor-args")
+        $argsList.Add("generic:impersonate")
+    }
+    
+    $argsList.Add($Url)
+
+    return $argsList
 }
 
 function Get-Download {
@@ -218,50 +240,50 @@ function Get-Download {
         $downloadButton = New-Object System.Windows.Forms.Button
         $downloadButton.Location = New-Object System.Drawing.Point(150, 210)
         $downloadButton.Text = "Download"
-            $downloadButton.Add_Click({
-        $url = $script:urlTextBox.Text
-        $outputDir = $script:outputTextBox.Text
-        $audioOnly = $audioOnlyCheckBox.Checked
-        $sslFix = $sslFixCheckBox.Checked
-        $ffmpegHls = $ffmpegHlsCheckBox.Checked
-        $botFix = $botFixCheckBox.Checked
+        $downloadButton.Add_Click({
+            $url = $script:urlTextBox.Text
+            $outputDir = $script:outputTextBox.Text
+            $audioOnly = $audioOnlyCheckBox.Checked
+            $sslFix = $sslFixCheckBox.Checked
+            $ffmpegHls = $ffmpegHlsCheckBox.Checked
+            $botFix = $botFixCheckBox.Checked
 
-        if ([string]::IsNullOrEmpty($url) -or [string]::IsNullOrEmpty($outputDir)) {
-            [System.Windows.Forms.MessageBox]::Show("Please enter a URL and select an output folder.", "Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
-            return
-        }
-
-        if (-not (Test-Path $outputDir)) {
-            try {
-                New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
-            } catch {
-                [System.Windows.Forms.MessageBox]::Show("Could not create folder: $outputDir`n$($_.Exception.Message)", "Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+            if ([string]::IsNullOrEmpty($url) -or [string]::IsNullOrEmpty($outputDir)) {
+                [System.Windows.Forms.MessageBox]::Show("Please enter a URL and select an output folder.", "Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
                 return
             }
-        }
 
-        $attempts = [System.Collections.Generic.List[hashtable]]::new()
-        $attempts.Add(@{ Ssl = $sslFix; Ffmpeg = $ffmpegHls; Bot = $botFix })
-        foreach ($candidate in @(@{ Ssl = $true; Ffmpeg = $ffmpegHls; Bot = $botFix }, @{ Ssl = $true; Ffmpeg = $true; Bot = $botFix })) {
-            $duplicate = $attempts | Where-Object { $_.Ssl -eq $candidate.Ssl -and $_.Ffmpeg -eq $candidate.Ffmpeg -and $_.Bot -eq $candidate.Bot }
-            if (-not $duplicate) { $attempts.Add($candidate) }
-        }
-
-        foreach ($attempt in $attempts) {
-            $argString = Get-YtDlpArgs -OutputDir $outputDir -Url $url -AudioOnly $audioOnly -SslFix $attempt.Ssl -FfmpegHls $attempt.Ffmpeg -BotFix $attempt.Bot
-            Write-Host "Attempt (SSL fix: $($attempt.Ssl), ffmpeg HLS: $($attempt.Ffmpeg), Bot fix: $($attempt.Bot)): $YtDlpExe $argString"
-
-            $proc = Start-Process -FilePath $YtDlpExe -ArgumentList $argString -NoNewWindow -Wait -PassThru
-            if ($proc.ExitCode -eq 0) {
-                Write-Host "Download completed."
-                [System.Windows.Forms.MessageBox]::Show("Download completed!", "Success", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
-                return
+            if (-not (Test-Path $outputDir)) {
+                try {
+                    New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+                } catch {
+                    [System.Windows.Forms.MessageBox]::Show("Could not create folder: $outputDir`n$($_.Exception.Message)", "Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+                    return
+                }
             }
-            Write-Host "yt-dlp exited with code $($proc.ExitCode)."
-        }
 
-        [System.Windows.Forms.MessageBox]::Show("All attempts failed. Check the console for details.", "yt-dlp error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning)
-    })
+            $attempts = [System.Collections.Generic.List[hashtable]]::new()
+            $attempts.Add(@{ Ssl = $sslFix; Ffmpeg = $ffmpegHls; Bot = $botFix })
+            foreach ($candidate in @(@{ Ssl = $true; Ffmpeg = $ffmpegHls; Bot = $botFix }, @{ Ssl = $true; Ffmpeg = $true; Bot = $botFix })) {
+                $duplicate = $attempts | Where-Object { $_.Ssl -eq $candidate.Ssl -and $_.Ffmpeg -eq $candidate.Ffmpeg -and $_.Bot -eq $candidate.Bot }
+                if (-not $duplicate) { $attempts.Add($candidate) }
+            }
+
+            foreach ($attempt in $attempts) {
+                $argArray = Get-YtDlpArgs -OutputDir $outputDir -Url $url -AudioOnly $audioOnly -SslFix $attempt.Ssl -FfmpegHls $attempt.Ffmpeg -BotFix $attempt.Bot
+                Write-Host "Attempt (SSL fix: $($attempt.Ssl), ffmpeg HLS: $($attempt.Ffmpeg), Bot fix: $($attempt.Bot)): $YtDlpExe $($argArray -join ' ')"
+
+                $proc = Start-Process -FilePath $YtDlpExe -ArgumentList $argArray -NoNewWindow -Wait -PassThru
+                if ($proc.ExitCode -eq 0) {
+                    Write-Host "Download completed."
+                    [System.Windows.Forms.MessageBox]::Show("Download completed!", "Success", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
+                    return
+                }
+                Write-Host "yt-dlp exited with code $($proc.ExitCode)."
+            }
+
+            [System.Windows.Forms.MessageBox]::Show("All attempts failed. Check the console for details.", "yt-dlp error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning)
+        })
         $form.Controls.Add($downloadButton)
 
         $form.ShowDialog() | Out-Null
@@ -269,7 +291,6 @@ function Get-Download {
 
         if ($global:RestartApp) {
             Remove-Module Get-Download -Force
-            Import-Module $psd1Path -Force
             Import-Module (Join-Path -Path $ModulePath -ChildPath "Get-Download.psd1") -Force
             Get-Download
             return
