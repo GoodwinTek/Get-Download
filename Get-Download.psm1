@@ -91,7 +91,7 @@ function Get-Download {
         $global:RestartApp = $false
 
         $form = New-Object System.Windows.Forms.Form
-        $form.Text = "yt-dlp Downloader"
+        $form.Text = "Get-Download"
         $form.Width = 400
         $form.Height = 280
         $form.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen
