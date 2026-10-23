@@ -77,7 +77,7 @@ function Get-YtDlpArgs {
     )
 
     $template = "$OutputDir\%(title)s.%(ext)s"
-    $argString = "--output `"$template`" --embed-metadata"
+    $argString = "--output `"$template`" --embed-metadata --download-archive `"$OutputDir\.yt-dlp-archive.txt`""
 
     if ($FfmpegHls) {
         $argString += " --merge-output-format mp4 --downloader m3u8:ffmpeg --downloader-args `"ffmpeg:-protocol_whitelist file,http,https,tcp,tls,crypto`""
