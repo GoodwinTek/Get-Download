@@ -73,8 +73,7 @@ function Get-YtDlpArgs {
         [string]$Url,
         [bool]$AudioOnly,
         [bool]$SslFix,
-        [bool]$FfmpegHls,
-        [bool]$BotFix
+        [bool]$FfmpegHls
     )
 
     $template = "$OutputDir\%(title)s.%(ext)s"
@@ -85,7 +84,6 @@ function Get-YtDlpArgs {
     }
     if ($AudioOnly) { $argString += " -x" }
     if ($SslFix) { $argString += " --legacy-server-connect --no-check-certificate" }
-    if ($BotFix) { $argString += " --extractor-args `"generic:impersonate`"" }
     $argString += " `"$Url`""
 
     return $argString
@@ -219,17 +217,15 @@ function Get-Download {
                 }
             }
 
-            # Each attempt is independent: base arguments plus one option set, tried in order
             $attempts = @(
-                @{ Label = "Standard";      Ssl = $false; Ffmpeg = $false; BotFix = $false }
-                @{ Label = "SSL fix";       Ssl = $true;  Ffmpeg = $false; BotFix = $false }
-                @{ Label = "HLS via ffmpeg"; Ssl = $false; Ffmpeg = $true; BotFix = $false }
-                @{ Label = "Bot fix";        Ssl = $false; Ffmpeg = $false; BotFix = $true }
-                #@{ Label = "SSL + HLS";     Ssl = $true;  Ffmpeg = $true; BotFix = $false }
+                @{ Label = "Standard";       Ssl = $false; Ffmpeg = $false }
+                @{ Label = "SSL fix";        Ssl = $true;  Ffmpeg = $false }
+                @{ Label = "HLS via ffmpeg"; Ssl = $false; Ffmpeg = $true }
+                #@{ Label = "SSL + HLS";     Ssl = $true;  Ffmpeg = $true }
             )
 
-                        foreach ($attempt in $attempts) {
-                $argString = Get-YtDlpArgs -OutputDir $outputDir -Url $url -AudioOnly $audioOnly -SslFix $attempt.Ssl -FfmpegHls $attempt.Ffmpeg -BotFix $attempt.BotFix
+            foreach ($attempt in $attempts) {
+                $argString = Get-YtDlpArgs -OutputDir $outputDir -Url $url -AudioOnly $audioOnly -SslFix $attempt.Ssl -FfmpegHls $attempt.Ffmpeg
 
                 Write-Host "Attempt [$($attempt.Label)]: $YtDlpExe $argString"
 
@@ -242,24 +238,24 @@ function Get-Download {
                     return
                 }
                 Write-Host "[$($attempt.Label)] exited with code $exitCode. Trying next option..."
-                    }
-                
-                    [System.Windows.Forms.MessageBox]::Show("All attempts failed. Check the console for details.", "yt-dlp error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning)
-                })
-                $form.Controls.Add($downloadButton)
-            
-                $form.ShowDialog() | Out-Null
-                $form.Dispose()
-            
-                if ($global:RestartApp) {
-                    Remove-Module Get-Download -Force
-                    Import-Module (Join-Path -Path $ModulePath -ChildPath "Get-Download.psd1") -Force
-                    Get-Download
-                    return
-                }
-            } while ($global:RestartApp)
-        
-            Write-Host ""
+            }
+
+            [System.Windows.Forms.MessageBox]::Show("All attempts failed. Check the console for details.", "yt-dlp error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning)
+        })
+        $form.Controls.Add($downloadButton)
+
+        $form.ShowDialog() | Out-Null
+        $form.Dispose()
+
+        if ($global:RestartApp) {
+            Remove-Module Get-Download -Force
+            Import-Module (Join-Path -Path $ModulePath -ChildPath "Get-Download.psd1") -Force
+            Get-Download
+            return
         }
+    } while ($global:RestartApp)
+
+    Write-Host ""
+}
 
 Export-ModuleMember -Function Get-Download, Update-GetDownload
