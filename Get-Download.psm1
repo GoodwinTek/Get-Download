@@ -71,14 +71,26 @@ function Get-YtDlpArgs {
     param(
         [string]$OutputDir,
         [string]$Url,
+        [string]$FileName,
         [bool]$AudioOnly,
         [bool]$SslFix,
         [bool]$FfmpegHls
     )
 
-    $template = "$OutputDir\%(title)s.%(ext)s"
-    $argString = "--output `"$template`" --embed-metadata --download-archive `"$OutputDir\.yt-dlp-archive.txt`""
+    if ($FileName) {
+        $template = "$OutputDir\$FileName.%(ext)s"
+    } else {
+        $template = "$OutputDir\%(title)s.%(ext)s"
+    }
 
+    $argString = "--output `"$template`" --embed-metadata"
+
+    if ($FileName) {
+        $argString += ' --replace-in-metadata title "^.*$" "' + $FileName + '"'
+    }
+    if ($Url -notmatch '\.m3u8') {
+        $argString += " --download-archive `"$OutputDir\.yt-dlp-archive.txt`""
+    }
     if ($FfmpegHls) {
         $argString += " --merge-output-format mp4 --downloader m3u8:ffmpeg --downloader-args `"ffmpeg:-protocol_whitelist file,http,https,tcp,tls,crypto`""
     }
@@ -115,7 +127,7 @@ function Get-Download {
         $form = New-Object System.Windows.Forms.Form
         $form.Text = "Get-Download"
         $form.Width = 400
-        $form.Height = 210
+        $form.Height = 240
         $form.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen
 
         $menuStrip = New-Object System.Windows.Forms.MenuStrip
@@ -195,13 +207,25 @@ function Get-Download {
         })
         $form.Controls.Add($browseButton)
 
+        $fileLabel = New-Object System.Windows.Forms.Label
+        $fileLabel.Location = New-Object System.Drawing.Point(10, 130)
+        $fileLabel.AutoSize = $true
+        $fileLabel.Text = "File Name:"
+        $form.Controls.Add($fileLabel)
+
+        $script:fileTextBox = New-Object System.Windows.Forms.TextBox
+        $script:fileTextBox.Location = New-Object System.Drawing.Point(100, 127)
+        $script:fileTextBox.Width = 245
+        $form.Controls.Add($script:fileTextBox)
+
         $downloadButton = New-Object System.Windows.Forms.Button
-        $downloadButton.Location = New-Object System.Drawing.Point(150, 140)
+        $downloadButton.Location = New-Object System.Drawing.Point(150, 170)
         $downloadButton.Text = "Download"
         $downloadButton.Add_Click({
             $url = $script:urlTextBox.Text
             $outputDir = $script:outputTextBox.Text
             $audioOnly = $audioOnlyCheckBox.Checked
+            $fileName = $script:fileTextBox.Text.Trim() -replace '[\\/:*?"<>|]', ''
 
             if ([string]::IsNullOrEmpty($url) -or [string]::IsNullOrEmpty($outputDir)) {
                 [System.Windows.Forms.MessageBox]::Show("Please enter a URL and select an output folder.", "Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
@@ -225,7 +249,7 @@ function Get-Download {
             )
 
             foreach ($attempt in $attempts) {
-                $argString = Get-YtDlpArgs -OutputDir $outputDir -Url $url -AudioOnly $audioOnly -SslFix $attempt.Ssl -FfmpegHls $attempt.Ffmpeg
+                $argString = Get-YtDlpArgs -OutputDir $outputDir -Url $url -FileName $fileName -AudioOnly $audioOnly -SslFix $attempt.Ssl -FfmpegHls $attempt.Ffmpeg
 
                 Write-Host "Attempt [$($attempt.Label)]: $YtDlpExe $argString"
 
